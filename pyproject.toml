@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "knowledgegraph"
+version = "0.1.0"
+description = "Turn a folder of code and docs into a queryable knowledge graph, and answer questions about it with a LangGraph multi-agent system"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "networkx>=3.4",
+    "rapidfuzz>=3.0",
+    "tree-sitter>=0.23.0,<0.27",
+    "tree-sitter-language-pack>=1.0",
+    "openai>=1.40",
+    "langgraph>=1.0",
+    "langchain-core>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-cov"]
+
+[project.scripts]
+kg = "knowledgegraph.__main__:main"
+kg-agent = "knowledgegraph.agents.__main__:main"
+
+[tool.setuptools]
+packages = [
+    "knowledgegraph",
+    "knowledgegraph.extractors",
+    "knowledgegraph.agents",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
