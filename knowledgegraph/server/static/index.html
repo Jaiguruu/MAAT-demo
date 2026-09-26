@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>kg-ui — knowledge graph workbench</title>
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header>
+  <h1>⚙ kg-ui</h1>
+  <nav>
+    <button data-tab="ask" class="tab active">Ask</button>
+    <button data-tab="graph" class="tab">Graph</button>
+    <button data-tab="settings" class="tab">Settings</button>
+  </nav>
+  <span id="conn-badge" class="badge">…</span>
+</header>
+
+<!-- ============ ASK TAB ============ -->
+<main id="tab-ask" class="tab-page active">
+  <section class="controls">
+    <textarea id="question" rows="2" placeholder="e.g. how does auth connect to the database?"></textarea>
+    <div class="row">
+      <select id="system">
+        <option value="graph">Multi-agent + knowledge graph</option>
+        <option value="baseline">Primitive ReAct baseline (no graph)</option>
+      </select>
+      <input id="ask-model" placeholder="model override (optional)">
+      <input id="max-steps" type="number" value="12" min="3" max="30" title="baseline step budget">
+      <button id="ask-btn" class="primary">Run</button>
+    </div>
+    <div class="row small" id="mode-note"></div>
+    <div class="row small"><span id="repo-note"></span>
+      <button id="align-repo" class="linkish" title="point the baseline at the graph's source repo">align baseline → graph repo</button>
+    </div>
+  </section>
+
+  <section class="split">
+    <div class="pane">
+      <h3>Live decisions</h3>
+      <ol id="timeline" class="timeline"></ol>
+    </div>
+    <div class="pane">
+      <h3>Answer</h3>
+      <pre id="answer" class="answer">(run a question)</pre>
+      <h3>Metrics</h3>
+      <pre id="ask-metrics" class="metrics"></pre>
+    </div>
+  </section>
+</main>
+
+<!-- ============ GRAPH TAB ============ -->
+<main id="tab-graph" class="tab-page">
+  <section class="controls row">
+    <input id="build-root" placeholder="repo folder to index (absolute path)">
+    <label class="chk"><input id="build-semantic" type="checkbox" checked> semantic pass (LLM)</label>
+    <button id="build-btn" class="primary">Build graph</button>
+    <span id="build-status" class="badge"></span>
+  </section>
+  <section class="split">
+    <div class="pane grow"><svg id="graph-svg"></svg></div>
+    <div class="pane side">
+      <div id="graph-meta" class="metrics"></div>
+      <h3>Node detail</h3>
+      <div id="node-detail" class="metrics">(click a node)</div>
+      <div id="legend">
+        <span class="legend-item"><i class="dot code"></i>code</span>
+        <span class="legend-item"><i class="dot document"></i>document</span>
+        <span class="legend-item"><i class="dot concept"></i>concept</span>
+        <span class="legend-item"><i class="dot paper"></i>paper</span>
+        <span class="legend-item"><i class="dot other"></i>other</span>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ============ SETTINGS TAB ============ -->
+<main id="tab-settings" class="tab-page">
+  <section class="pane">
+    <h3>LLM provider</h3>
+    <label>Base URL <span class="hint">(blank = provider default / OpenRouter when OR key set)</span>
+      <input id="set-base-url" placeholder="https://api.groq.com/openai/v1">
+    </label>
+    <label>API key
+      <input id="set-api-key" type="password" placeholder="sk-… (kept in memory only)">
+    </label>
+    <label>Model (both layers)
+      <input id="set-model" list="model-list" placeholder="google/gemini-2.0-flash-001">
+      <datalist id="model-list"></datalist>
+    </label>
+    <div class="row">
+      <label>Semantic model <input id="set-semantic-model" list="model-list" placeholder="(inherits)"></label>
+      <label>Agent model <input id="set-agent-model" list="model-list" placeholder="(inherits)"></label>
+    </div>
+    <div class="row">
+      <button id="save-settings" class="primary">Save</button>
+      <button id="test-conn">Test connection</button>
+      <span id="test-result" class="badge"></span>
+    </div>
+    <div id="settings-effective" class="metrics"></div>
+  </section>
+  <section class="pane">
+    <h3>Model catalog</h3>
+    <div id="model-catalog" class="metrics"></div>
+  </section>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

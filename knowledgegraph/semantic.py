@@ -33,10 +33,12 @@ import hashlib
 import json
 import re
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from knowledgegraph import config
+from knowledgegraph import metrics as kg_metrics
 from knowledgegraph.ids import make_id
 from knowledgegraph.validate import validate_extraction
 
@@ -90,15 +92,26 @@ def _clip_to_budget(text: str, budget_tokens: int) -> str:
 def _call_llm(user_prompt: str, model: str) -> str:
     from openai import OpenAI
     client = OpenAI(api_key=config.api_key(), base_url=config.base_url())
-    resp = client.chat.completions.create(
-        model=model,
-        temperature=0,
-        max_tokens=2000,
-        messages=[
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": user_prompt},
-        ],
-    )
+    ledger = kg_metrics.current_ledger()
+    t0 = time.perf_counter()
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            temperature=0,
+            max_tokens=2000,
+            messages=[
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+        )
+    except Exception as e:
+        if ledger:
+            ledger.record_llm("ingest", model, wall_ms=(time.perf_counter() - t0) * 1000,
+                              error=f"{type(e).__name__}: {e}")
+        raise
+    if ledger:
+        ledger.record_llm("ingest", model, resp_usage=getattr(resp, "usage", None),
+                          wall_ms=(time.perf_counter() - t0) * 1000)
     return resp.choices[0].message.content or ""
 
 

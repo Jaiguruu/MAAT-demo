@@ -29,6 +29,9 @@ kg affected "auth.py"
 # 3. multi-agent answers (needs OPENAI_API_KEY)
 export OPENAI_API_KEY=sk-...
 kg ask "what breaks if I change the database layer?"
+
+# 4. benchmark it against a primitive ReAct baseline (needs API key)
+kg-bench path/to/repo --all
 ```
 
 ## What you get
@@ -76,7 +79,10 @@ pipeline and every tool still run locally with zero network calls.
 | [`docs/pipeline.md`](docs/pipeline.md) | the build stages, stage by stage |
 | [`docs/agents.md`](docs/agents.md) | the multi-agent design, state, and fallbacks |
 | [`docs/tools-reference.md`](docs/tools-reference.md) | every graph tool, CLI + agent-facing |
+| [`docs/benchmark.md`](docs/benchmark.md) | the ReAct baseline comparison, metrics, provider switching |
+| [`docs/operations.md`](docs/operations.md) | operating manual: UI, bench, every report and metric |
 | [`docs/interview-guide.md`](docs/interview-guide.md) | explain the whole system to a third person |
+| [`docs/diagrams/`](docs/diagrams/00-overview.md) | UML set: use-case, component, activity, sequence, class, state |
 
 ## Development
 

@@ -38,7 +38,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from knowledgegraph.agents import llm
+from knowledgegraph.agents import events, llm
 from knowledgegraph.agents.state import AgentState
 from knowledgegraph.agents.tools import (
     TOOL_CATALOG,
@@ -68,7 +68,7 @@ Keep it to 1-3 workers. orient is almost always worth including."""
 
 
 def _llm_plan(state: AgentState) -> dict:
-    out = llm.chat(_SUPERVISOR_SYSTEM, state["question"])
+    out = llm.chat(_SUPERVISOR_SYSTEM, state["question"], purpose="plan")
     data = json.loads(out.strip().strip("`").removeprefix("json").strip())
     workers = [w for w in data.get("workers", []) if w in ("orient", "explorer", "impact")]
     return {"workers": workers or ["orient", "explorer"], "hints": data.get("hints", {})}
@@ -87,25 +87,39 @@ def _keyword_plan(question: str) -> dict:
 
 
 def supervisor_node(state: AgentState) -> dict:
+    raw = None
     if llm.llm_available():
         try:
             plan = _llm_plan(state)
+            source = "llm"
         except Exception:
             plan = _keyword_plan(state["question"])
+            source = "keyword (llm plan failed)"
     else:
         plan = _keyword_plan(state["question"])
+        source = "keyword (no llm)"
+    b = events.bridge()
+    if b:
+        b.publish(events.ev_plan(state["question"], plan["workers"], source, raw))
     return {
         "plan": plan["workers"],
-        "trace": [f"supervisor -> route to {', '.join(plan['workers'])}"],
+        "trace": [f"supervisor -> route to {', '.join(plan['workers'])} ({source})"],
     }
 
 
 # --- workers --------------------------------------------------------------------
 
 
+def _emit_tool(agent: str, res: ToolResult) -> None:
+    b = events.bridge()
+    if b:
+        b.publish(events.ev_tool_result(agent, res.name, res.ok, res.text, res.data))
+
+
 def orient_node(state: AgentState) -> dict:
     G = load_graph(state["graph_path"])
     res: ToolResult = tool_graph_stats(G)
+    _emit_tool("orient", res)
     return {
         "evidence": [{"tool": res.name, "ok": res.ok, "text": res.text, "data": res.data}],
         "trace": [f"orient: {res.text}"],
@@ -128,6 +142,9 @@ def explorer_node(state: AgentState) -> dict:
         from knowledgegraph.agents.tools import tool_find_path
         results.append(tool_find_path(G, entities[0], entities[1]))
 
+    for r in results:
+        _emit_tool("explorer", r)
+
     evidence = [{"tool": r.name, "ok": r.ok, "text": r.text, "data": _slim(r.data)} for r in results]
     ok_any = any(r.ok for r in results)
     return {
@@ -144,6 +161,8 @@ def impact_node(state: AgentState) -> dict:
     entities = res.data.get("matched") or []
     target = entities[0] if entities else state["question"].strip("'\"")
     results = [tool_affected(G, target), tool_neighbors(G, target)]
+    for r in results:
+        _emit_tool("impact", r)
     evidence = [{"tool": r.name, "ok": r.ok, "text": r.text, "data": _slim(r.data)} for r in results]
     return {
         "evidence": evidence,
@@ -196,13 +215,20 @@ def synthesizer_node(state: AgentState) -> dict:
         f"## tool: {ev.get('tool')} [{'ok' if ev.get('ok') else 'miss'}]\n{ev.get('text', '')}"
         for ev in state.get("evidence", [])
     )
+    b = events.bridge()
     if llm.llm_available():
         try:
             answer = llm.chat(_SYNTH_SYSTEM, f"Question: {state['question']}\n\n{evidence_block}")
+            if b:
+                b.publish(events.ev_synthesis("llm", len(answer)))
             return {"answer": answer, "trace": ["synthesizer: LLM answer"]}
         except Exception as e:
             answer = _deterministic_answer(state) + f"\n\n(LLM synthesis unavailable: {e})"
+            if b:
+                b.publish(events.ev_synthesis("extractive (llm error)", len(answer), str(e)))
             return {"answer": answer, "trace": ["synthesizer: fallback (LLM error)"]}
+    if b:
+        b.publish(events.ev_synthesis("extractive (no llm)", len(_deterministic_answer(state))))
     return {"answer": _deterministic_answer(state), "trace": ["synthesizer: extractive fallback"]}
 
 

@@ -1,0 +1,84 @@
+:root {
+  --bg: #0f1115; --panel: #171a21; --border: #2a2f3a;
+  --text: #e6e9ef; --dim: #8b93a5; --accent: #5b9dff;
+  --ok: #4cc38a; --err: #e5534b; --warn: #d9a53f;
+  --code: #5b9dff; --document: #4cc38a; --concept: #d9a53f; --paper: #b48cf2;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.5 ui-monospace, "Cascadia Code", Consolas, monospace;
+}
+header {
+  display: flex; align-items: center; gap: 16px;
+  padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--panel);
+}
+header h1 { font-size: 16px; margin: 0; color: var(--accent); }
+nav { display: flex; gap: 6px; }
+.tab {
+  background: none; border: 1px solid var(--border); color: var(--dim);
+  padding: 6px 14px; cursor: pointer; border-radius: 6px; font: inherit;
+}
+.tab.active { color: var(--text); border-color: var(--accent); }
+.badge { margin-left: auto; font-size: 12px; color: var(--dim); }
+.badge.ok { color: var(--ok); } .badge.err { color: var(--err); } .badge.warn { color: var(--warn); }
+
+.tab-page { display: none; padding: 16px; gap: 16px; }
+.tab-page.active { display: flex; flex-direction: column; }
+
+.controls { display: flex; flex-direction: column; gap: 8px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.row.small { color: var(--dim); font-size: 12px; }
+textarea, input, select {
+  background: var(--panel); color: var(--text); border: 1px solid var(--border);
+  border-radius: 6px; padding: 8px 10px; font: inherit;
+}
+textarea { width: 100%; resize: vertical; }
+input[type=number] { width: 90px; }
+button {
+  background: var(--panel); border: 1px solid var(--border); color: var(--text);
+  padding: 8px 16px; border-radius: 6px; cursor: pointer; font: inherit;
+}
+button.primary { border-color: var(--accent); color: var(--accent); }
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: .5; cursor: wait; }
+.linkish { background: none; border: none; color: var(--accent); padding: 0;
+           text-decoration: underline; cursor: pointer; font-size: 12px; }
+.chk { color: var(--dim); display: flex; gap: 6px; align-items: center; }
+label { display: flex; flex-direction: column; gap: 4px; color: var(--dim); font-size: 12px; }
+.hint { color: var(--dim); opacity: .7; }
+
+.split { display: flex; gap: 16px; min-height: 55vh; }
+.pane { flex: 1; background: var(--panel); border: 1px solid var(--border);
+        border-radius: 8px; padding: 12px 16px; overflow: auto; }
+.pane.grow { flex: 2.2; padding: 0; }
+.pane.side { flex: 1; max-width: 340px; }
+.pane h3 { margin: 4px 0 10px; font-size: 12px; text-transform: uppercase;
+           letter-spacing: .08em; color: var(--dim); }
+
+.timeline { list-style: none; margin: 0; padding: 0; }
+.timeline li { padding: 6px 8px; border-left: 2px solid var(--border); margin: 4px 0; }
+.timeline li.ev-plan { border-left-color: var(--accent); }
+.timeline li.ev-tool_result.ok { border-left-color: var(--ok); }
+.timeline li.ev-tool_result.miss { border-left-color: var(--err); }
+.timeline li.ev-react_action { border-left-color: var(--warn); }
+.timeline li.ev-synthesis { border-left-color: var(--paper); }
+.timeline li.ev-done { border-left-color: var(--ok); }
+.timeline .t { color: var(--dim); font-size: 11px; margin-right: 8px; }
+.timeline .who { color: var(--accent); }
+.timeline .detail { color: var(--dim); font-size: 12px; white-space: pre-wrap; }
+
+.answer, .metrics { white-space: pre-wrap; font-size: 13px; }
+.metrics { color: var(--dim); }
+
+#graph-svg { width: 100%; height: 68vh; display: block; }
+.link { stroke: #2f3542; stroke-opacity: .6; }
+.link.inferred { stroke-dasharray: 4 3; stroke: #3d4658; }
+.node circle { stroke: #0f1115; stroke-width: 1.5; cursor: pointer; }
+.node text { fill: var(--dim); font-size: 10px; pointer-events: none; }
+.node text.on { fill: var(--text); }
+.legend-item { margin-right: 12px; font-size: 12px; color: var(--dim); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 4px; }
+.dot.code { background: var(--code); } .dot.document { background: var(--document); }
+.dot.concept { background: var(--concept); } .dot.paper { background: var(--paper); }
+.dot.other { background: #6b7280; }

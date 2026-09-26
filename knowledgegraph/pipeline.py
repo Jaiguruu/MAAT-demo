@@ -130,6 +130,7 @@ def run_pipeline(
     mark("analyze", t0 + timings["cluster"])
 
     # Stage 6: report + serialize
+    G.graph["source_root"] = str(root)
     graph_path = (out_dir / "graph.json") if out_dir else default_graph_json()
     save_graph(G, graph_path)
 

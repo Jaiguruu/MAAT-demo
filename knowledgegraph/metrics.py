@@ -16,15 +16,19 @@ and deliberately dumb: no DB, just JSON in ``kg-out/bench/``.
 from __future__ import annotations
 
 import json
+import os
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 
+from knowledgegraph import config  # noqa: F401 - loads .env into os.environ
+
 PURPOSES = ("ingest", "plan", "read", "answer")
 
-# default $/1M tokens; overridable per model via COST_TABLE
+# default $/1M tokens; extend per model via KG_PRICE_OVERRIDES env var
 DEFAULT_COST_TABLE: dict[str, tuple[float, float]] = {
     # model_prefix: (input $/1M, output $/1M)
     "gpt-4.1-mini": (0.40, 1.60),
@@ -32,15 +36,31 @@ DEFAULT_COST_TABLE: dict[str, tuple[float, float]] = {
     "gpt-4o-mini": (0.15, 0.60),
     "gpt-4o": (2.50, 10.00),
     "google/gemini-2.0-flash-001": (0.10, 0.40),
+    "gemini-2.0-flash": (0.10, 0.40),
+    "deepseek": (0.27, 1.10),
+    "llama-3.1-8b-instant": (0.05, 0.08),
+    "meta-llama/Llama-3.3-70B": (0.88, 0.88),
 }
 
+
+def _load_price_overrides() -> dict[str, tuple[float, float]]:
+    """KG_PRICE_OVERRIDES: JSON {model-prefix: [in $/1M, out $/1M]}."""
+    raw = os.environ.get("KG_PRICE_OVERRIDES")
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+        return {str(k): (float(v[0]), float(v[1])) for k, v in data.items()}
+    except (json.JSONDecodeError, TypeError, IndexError, ValueError):
+        print("warning: KG_PRICE_OVERRIDES is not valid JSON - ignoring", file=sys.stderr)
+        return {}
 _lock = threading.Lock()
 
 
 def estimate_cost(model: str, prompt_tokens: int, completion_tokens: int,
                   table: dict | None = None) -> float:
     """Best-effort $ cost. Unknown models price at zero rather than guessing."""
-    tbl = table or DEFAULT_COST_TABLE
+    tbl = table if table is not None else {**DEFAULT_COST_TABLE, **_load_price_overrides()}
     for prefix, (in_p, out_p) in tbl.items():
         if model.startswith(prefix):
             return round(prompt_tokens / 1e6 * in_p + completion_tokens / 1e6 * out_p, 6)
@@ -97,6 +117,23 @@ class UsageLedger:
         with _lock:
             self._records.append(rec)
         return rec
+
+    def mark_zeroed(self, purpose: str) -> None:
+        """Zero out the tokens/cost of the most recent provisional record.
+
+        Used when a call's true purpose is only known after parsing the
+        response (ReAct finish): the provisional row keeps the call count and
+        wall time but stops contributing tokens, which were re-recorded under
+        the corrected purpose.
+        """
+        with _lock:
+            for r in reversed(self._records):
+                if r["kind"] == "llm" and r["purpose"] == purpose and not r.get("error"):
+                    r["prompt_tokens"] = 0
+                    r["completion_tokens"] = 0
+                    r["cost_usd"] = 0.0
+                    r["superseded"] = True
+                    return
 
     # -- aggregation ---------------------------------------------------------
 
