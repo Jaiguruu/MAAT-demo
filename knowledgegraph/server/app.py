@@ -3,7 +3,8 @@
 A FastAPI app + single-page frontend (no build step) providing:
 
 - **Settings**: provider base URL, API key, model selection (semantic/agent),
-  stored in-process (never written to disk), with a live "test connection".
+  persisted to disk (settings.json) for persistence across sessions,
+  with a live "test connection".
 - **Graph view**: node-link JSON for D3 + per-node detail, build trigger with
   live progress events.
 - **Ask**: one question through either system (multi-agent graph or ReAct
@@ -35,18 +36,31 @@ app = FastAPI(title="kg-ui", docs_url=None, redoc_url=None)
 
 _STATIC = Path(__file__).parent / "static"
 
-# in-process runtime settings (never persisted to disk by the server)
-_runtime: dict = {
-    "base_url": None,
-    "api_key": None,
-    "model": None,
-    "semantic_model": None,
-    "agent_model": None,
-    "max_steps": 12,
-    # explicit baseline override; None = follow the graph's source repo
-    "baseline_repo": None,
-}
+# Settings file for persistence across sessions
+_SETTINGS_FILE = Path(__file__).parent / "settings.json"
+
+
+def load_persistent_settings() -> dict:
+    """Load settings from persistent storage if available."""
+    if _SETTINGS_FILE.exists():
+        try:
+            return json.loads(_SETTINGS_FILE.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            pass
+    return {}
+
+
+# in-process runtime settings (persisted to disk)
+_runtime: dict = load_persistent_settings()
 _runtime_lock = threading.Lock()
+
+
+def save_persistent_settings() -> None:
+    """Save current runtime settings to persistent storage."""
+    with _runtime_lock:
+        # Don't save the API key to disk for security
+        to_save = {k: v for k, v in _runtime.items() if k != "api_key"}
+    _SETTINGS_FILE.write_text(json.dumps(to_save, indent=2), encoding="utf-8")
 
 
 def graph_source_root() -> str | None:
@@ -168,6 +182,8 @@ def post_settings(s: SettingsIn):
             _runtime["agent_model"] = s.agent_model or None
         if s.baseline_repo is not None:
             _runtime["baseline_repo"] = s.baseline_repo or None
+        # Persist settings to disk (without API key)
+        save_persistent_settings()
     _apply_runtime()
     return get_settings()
 

@@ -1,0 +1,7 @@
+{
+  "base_url": "https://openrouter.ai/api/v1",
+  "model": "openai/gpt-4.1-mini",
+  "semantic_model": "openai/gpt-4.1-mini",
+  "agent_model": "openai/gpt-4.1-mini",
+  "baseline_repo": null
+}

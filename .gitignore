@@ -18,6 +18,7 @@ env/
 # Secrets and environment
 .env
 .env.local
+settings.json
 *.pem
 *.key
 

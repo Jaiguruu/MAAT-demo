@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from knowledgegraph.agents import llm
+from knowledgegraph.agents import events
 from knowledgegraph.agents.llm import LLMConfig
 from knowledgegraph import metrics as kg_metrics
 
@@ -147,7 +148,7 @@ def iter_react(question: str, root: str | Path, max_steps: int = 12,
     finish_reason = "budget"
     answer = "(no answer produced: step budget exhausted)"
 
-    yield events_emit({"type": "react_started", "question": question,
+    yield events.emit({"type": "react_started", "question": question,
                        "repo": root.name, "max_steps": max_steps})
 
     for step_i in range(1, max_steps + 1):
@@ -159,14 +160,19 @@ def iter_react(question: str, root: str | Path, max_steps: int = 12,
             raw, resp, meta = _chat_with_retry(_REACT_SYSTEM, user, cfg, provisional)
         except Exception as e:
             steps.append({"step": step_i, "action": "llm_error", "error": str(e)})
-            yield events_emit({"type": "react_error", "step": step_i,
+            yield events.emit({"type": "react_error", "step": step_i,
                                "error": str(e)[:200]})
-            yield events_emit({"type": "result",
+            yield events.emit({"type": "result",
                                "result": ReActResult(answer=f"(llm error: {e})",
                                                      steps=steps, finish_reason="error")})
             return
 
         action = _parse_action(raw)
+        
+        # Debug: log raw response if parsing fails
+        if action is None:
+            print(f"[DEBUG] LLM raw response (step {step_i}):\n{raw[:500]}", flush=True)
+        
         ledger = kg_metrics.current_ledger()
         if ledger:
             ledger.record_llm(provisional, meta["model"],
@@ -180,7 +186,7 @@ def iter_react(question: str, root: str | Path, max_steps: int = 12,
 
         if action is None:
             steps.append({"step": step_i, "action": "unparseable", "raw": raw[:200]})
-            yield events_emit({"type": "react_action", "step": step_i,
+            yield events.emit({"type": "react_action", "step": step_i,
                                "tool": "(unparseable)", "arg": raw[:120], "out_chars": 0})
             observations.append("(unparseable action - reply with the JSON shape)")
             continue
@@ -190,7 +196,7 @@ def iter_react(question: str, root: str | Path, max_steps: int = 12,
             answer = str(action.get("answer") or "(empty answer)")
             steps.append({"step": step_i, "action": "finish"})
             finish_reason = "finish"
-            yield events_emit({"type": "react_finish", "step": step_i})
+            yield events.emit({"type": "react_finish", "step": step_i})
             break
 
         out = _exec_tool(root, str(tool), action)
@@ -198,20 +204,14 @@ def iter_react(question: str, root: str | Path, max_steps: int = 12,
         arg = action.get("path") or action.get("pattern") or ""
         steps.append({"step": step_i, "action": tool, "arg": str(arg)[:120],
                       "out_chars": len(out)})
-        yield events_emit({"type": "react_action", "step": step_i, "tool": str(tool),
+        yield events.emit({"type": "react_action", "step": step_i, "tool": str(tool),
                            "arg": str(arg)[:120], "out_chars": len(out)})
-        yield events_emit({"type": "react_observation", "step": step_i,
+        yield events.emit({"type": "react_observation", "step": step_i,
                            "preview": out[:400]})
 
-    yield events_emit({"type": "result",
+    yield events.emit({"type": "result",
                        "result": ReActResult(answer=answer, steps=steps,
                                              finish_reason=finish_reason)})
-
-
-def events_emit(event: dict) -> dict:
-    """Tag an event with seq/ts (delegates to the shared event module)."""
-    from knowledgegraph.agents import events as _ev
-    return _ev.emit(event)
 
 
 def run_react(question: str, root: str | Path, max_steps: int = 12,
@@ -258,17 +258,44 @@ def _parse_action(raw: str) -> dict | None:
     """Tolerant JSON extraction for one ReAct action."""
     import json
     text = raw.strip()
+    
+    # Strip common reasoning patterns that precede JSON
+    # Remove <thought>...</thought> blocks
+    text = re.sub(r"<thought>.*?</thought>", "", text, flags=re.DOTALL | re.IGNORECASE)
+    # Remove any leading <thought> content without closing tag
+    text = re.sub(r"^\s*<thought>.*", "", text, flags=re.DOTALL)
+    # Strip leading/trailing whitespace after removing reasoning
+    text = text.strip()
+    
+    # Remove markdown code blocks
     text = re.sub(r"^```(?:json)?\s*", "", text)
     text = re.sub(r"\s*```$", "", text)
+    text = text.strip()
+    
+    # Try parsing the whole text as JSON first
     try:
         data = json.loads(text)
         return data if isinstance(data, dict) else None
     except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", text, re.DOTALL)
-        if not m:
-            return None
+        pass
+    
+    # Try to find JSON object in the text (greedy with DOTALL to handle nested braces)
+    m = re.search(r"\{[^{}]*\}", text, re.DOTALL)
+    if m:
         try:
             data = json.loads(m.group(0))
             return data if isinstance(data, dict) else None
         except json.JSONDecodeError:
-            return None
+            pass
+    
+    # Fallback: try to extract JSON between first { and last }
+    start = text.find("{")
+    end = text.rfind("}")
+    if start != -1 and end != -1 and end > start:
+        try:
+            data = json.loads(text[start:end + 1])
+            return data if isinstance(data, dict) else None
+        except json.JSONDecodeError:
+            pass
+    
+    return None
